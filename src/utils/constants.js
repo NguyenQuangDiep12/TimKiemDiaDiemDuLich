@@ -1,0 +1,12 @@
+export const CONFIG = {
+  OPENTRIPMAP_API_KEY: '5ae2e3f221c38a28845f05b6be3830b9e5d80e71bd558e37bd2a3622',
+  DEFAULT_CENTER: [105.8412, 21.0285],
+  DEFAULT_ZOOM: 14,
+  SEARCH_RADIUS: 5000
+}
+
+export const MAP_LAYERS = {
+  OSM: 'osm',
+  SATELLITE: 'satellite',
+  TERRAIN: 'terrain'
+}
