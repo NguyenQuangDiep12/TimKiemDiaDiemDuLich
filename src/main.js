@@ -6,7 +6,6 @@ import './styles/style.css'
 
 import MapView from './components/MapView.js'
 import PlacesPanel from './components/PlacesPanel.js'
-import SearchControl from './components/SearchControl.js'
 import MapControls from './components/MapControls.js'
 import RoutingPanel from './components/RoutingPanel.js'
 
@@ -23,24 +22,17 @@ class TourismMapApp {
     this.placesPanel = null
     this.mapControls = null
 
-    this.startSearch = null
-    this.endSearch = null
-
     this.currentLocation = null
   }
 
   async init() {
     this.renderLayout()
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, 100)
-    )
+    await new Promise((resolve) => setTimeout(resolve, 100))
 
     await this.initializeComponents()
 
-    console.log(
-      'WebGIS Tourism Explorer initialized'
-    )
+    console.log('WebGIS Tourism Explorer initialized')
   }
 
   renderLayout() {
@@ -49,15 +41,10 @@ class TourismMapApp {
         <div class="d-flex align-items-center gap-2">
           <i
             class="bi bi-globe-asia-australia"
-            style="
-              color: var(--accent);
-              font-size: 1.5rem;
-            "
+            style="color: var(--accent); font-size: 1.5rem;"
           ></i>
-
           <div class="header-title">
-            WebGIS
-            <span>Tourism Explorer</span>
+            WebGIS <span>Tourism Explorer</span>
           </div>
         </div>
 
@@ -65,10 +52,7 @@ class TourismMapApp {
 
         <div class="header-location">
           <i class="bi bi-geo-alt-fill text-danger"></i>
-
-          <span id="header-location-text">
-            Chưa chọn vị trí
-          </span>
+          <span id="header-location-text">Chưa chọn vị trí</span>
         </div>
       </header>
 
@@ -77,13 +61,7 @@ class TourismMapApp {
         <div id="map"></div>
 
         <div id="left-sidebar">
-
-          <div id="start-search"></div>
-
-          <div id="end-search"></div>
-
           <div id="routing-panel"></div>
-
         </div>
 
         <div id="place-panel"></div>
@@ -102,138 +80,40 @@ class TourismMapApp {
 
   async initializeComponents() {
     // MAP
-
     this.mapView = new MapView('map')
     await this.mapView.init()
 
-    // ROUTING
-
+    // ROUTING (now includes integrated search controls)
     this.routingPanel = new RoutingPanel(
       'routing-panel',
-      this.mapView
+      this.mapView,
+      {
+        onStartSelect: async (lat, lon, displayName) => {
+          this.setCurrentLocation(lat, lon, displayName)
+          this.mapView.clearMarkers()
+          this.mapView.addMarker(lat, lon)
+          this.mapView.flyTo(lat, lon, 15)
+          try {
+            await this.placesPanel.loadNearbyPlaces(lat, lon)
+          } catch {
+            showToast('❌ Không thể tải dữ liệu địa điểm tại vùng này')
+          }
+        },
+        onDestSelect: (lat, lon, displayName) => {
+          this.mapView.addMarker(lat, lon)
+          this.mapView.flyTo(lat, lon, 15)
+        }
+      }
     )
 
     // PLACES PANEL
-
     this.placesPanel = new PlacesPanel(
       'place-panel',
       this.mapView,
       this.routingPanel
     )
 
-    // START SEARCH
-
-    this.startSearch = new SearchControl(
-      'start-search',
-      {
-        type: 'start',
-
-        placeholder: 'Nhập điểm đi...',
-
-        onSelect: async (place) => {
-          const {
-            lat,
-            lon,
-            displayName,
-          } = place
-
-          console.log('Điểm đi:', place)
-
-          // update header
-
-          this.setCurrentLocation(
-            lat,
-            lon,
-            displayName
-          )
-
-          // map
-
-          this.mapView.clearMarkers()
-
-          this.mapView.addMarker(lat, lon)
-
-          this.mapView.flyTo(lat, lon, 15)
-
-          // nearby places
-
-          await this.placesPanel.loadNearbyPlaces(
-            lat,
-            lon
-          )
-
-          // routing
-
-          if (
-            this.routingPanel?.setStartPoint
-          ) {
-            this.routingPanel.setStartPoint({
-              lat,
-              lon,
-              name: displayName,
-            })
-          }
-
-          showToast(
-            `📍 Điểm đi: ${displayName}`
-          )
-        },
-      }
-    )
-
-    // END SEARCH
-
-    this.endSearch = new SearchControl(
-      'end-search',
-      {
-        type: 'destination',
-
-        placeholder: 'Nhập điểm đến...',
-
-        onSelect: async (place) => {
-          const {
-            lat,
-            lon,
-            displayName,
-          } = place
-
-          console.log('Điểm đến:', place)
-
-          // update header
-
-          this.setCurrentLocation(
-            lat,
-            lon,
-            displayName
-          )
-
-          // map
-
-          this.mapView.addMarker(lat, lon)
-
-          this.mapView.flyTo(lat, lon, 15)
-
-          // routing
-
-          if (
-            this.routingPanel?.setEndPoint
-          ) {
-            this.routingPanel.setEndPoint({
-              lat,
-              lon,
-              name: displayName,
-            })
-          }
-
-          showToast(
-            `🏁 Điểm đến: ${displayName}`
-          )
-        },
-      }
-    )
-
     // MAP CONTROLS
-
     this.mapControls = new MapControls(
       'map-controls',
       'layer-toggle',
@@ -241,131 +121,56 @@ class TourismMapApp {
       this.placesPanel,
       this.routingPanel,
       null,
-      (lat, lon, label) =>
-        this.setCurrentLocation(
-          lat,
-          lon,
-          label
-        ),
+      (lat, lon, label) => this.setCurrentLocation(lat, lon, label),
       () => this.resetAppState()
     )
 
     // MAP CLICK
-
-    this.mapView.setMapClickCallback(
-      async (lat, lon) => {
-        showToast(
-          '📍 Đang tìm địa điểm du lịch xung quanh...'
-        )
-
-        try {
-          await this.handleLocationSelected(
-            lat,
-            lon
-          )
-
-          showToast(
-            '✨ Đã tải danh sách địa điểm du lịch!'
-          )
-        } catch {
-          showToast(
-            '❌ Không thể tải dữ liệu địa điểm tại vùng này'
-          )
-        }
+    this.mapView.setMapClickCallback(async (lat, lon) => {
+      showToast('📍 Đang tìm địa điểm du lịch xung quanh...')
+      try {
+        await this.handleLocationSelected(lat, lon)
+        showToast('✨ Đã tải danh sách địa điểm du lịch!')
+      } catch {
+        showToast('❌ Không thể tải dữ liệu địa điểm tại vùng này')
       }
-    )
+    })
 
     // MARKER CLICK
-
-    this.mapView.setMarkerClickCallback(
-      (place) => {
-        this.placesPanel.showPlaceDetails(
-          place
-        )
-      }
-    )
+    this.mapView.setMarkerClickCallback((place) => {
+      this.placesPanel.showPlaceDetails(place)
+    })
 
     // MAP PICK ROUTING
-
-    this.mapView.setMapPickCallback(
-      (type, lat, lon) => {
-        this.routingPanel.handleMapPick(
-          type,
-          lat,
-          lon
-        )
-      }
-    )
+    this.mapView.setMapPickCallback((type, lat, lon) => {
+      this.routingPanel.handleMapPick(type, lat, lon)
+    })
   }
 
   async handleLocationSelected(lat, lon) {
     try {
-      const address =
-        await NominatimService.reverseGeocode(
-          lat,
-          lon
-        )
-
-      this.setCurrentLocation(
-        lat,
-        lon,
-        address.display_name.split(',')[0]
-      )
+      const address = await NominatimService.reverseGeocode(lat, lon)
+      this.setCurrentLocation(lat, lon, address.display_name.split(',')[0])
     } catch {
-      this.setCurrentLocation(
-        lat,
-        lon,
-        `Tọa độ: ${lat.toFixed(
-          4
-        )}, ${lon.toFixed(4)}`
-      )
+      this.setCurrentLocation(lat, lon, `Tọa độ: ${lat.toFixed(4)}, ${lon.toFixed(4)}`)
     }
-
-    await this.placesPanel.loadNearbyPlaces(
-      lat,
-      lon
-    )
+    await this.placesPanel.loadNearbyPlaces(lat, lon)
   }
 
   setCurrentLocation(lat, lon, label) {
-    this.currentLocation = {
-      lat,
-      lon,
-      name: label,
-    }
-
-    const locationText =
-      document.getElementById(
-        'header-location-text'
-      )
-
-    if (locationText) {
-      locationText.textContent = label
-    }
+    this.currentLocation = { lat, lon, name: label }
+    const locationText = document.getElementById('header-location-text')
+    if (locationText) locationText.textContent = label
   }
 
   resetAppState() {
     this.currentLocation = null
-
-    const locationText =
-      document.getElementById(
-        'header-location-text'
-      )
-
-    if (locationText) {
-      locationText.textContent =
-        'Chưa chọn vị trí'
-    }
-
+    const locationText = document.getElementById('header-location-text')
+    if (locationText) locationText.textContent = 'Chưa chọn vị trí'
     this.mapView.resetView()
-
-    this.startSearch?.clear()
-    this.endSearch?.clear()
   }
 }
 
 const app = new TourismMapApp()
-
 app.init()
-
 export default app

@@ -1,14 +1,20 @@
 import NominatimService from '../services/NominatimService.js'
 import RoutingService from '../services/RoutingService.js'
+import SearchControl from './SearchControl.js'
 import { formatDistance, formatDuration, showToast } from '../utils/helpers.js'
 
 export default class RoutingPanel {
-  constructor(containerId, mapView) {
+  constructor(containerId, mapView, callbacks = {}) {
     this.container = document.getElementById(containerId)
     this.mapView = mapView
+    this.onStartSelect = callbacks.onStartSelect || null
+    this.onDestSelect = callbacks.onDestSelect || null
     this.startPoint = { name: '', lat: null, lon: null }
     this.endPoint = { name: '', lat: null, lon: null }
+    this.startSearch = null
+    this.endSearch = null
     this.render()
+    this.initSearchControls()
     this.bindEvents()
   }
 
@@ -16,55 +22,110 @@ export default class RoutingPanel {
     this.container.innerHTML = `
       <div class="routing-panel">
         <div class="routing-panel-header">
-          <h6><i class="bi bi-sign-turn-right"></i> Tìm đường</h6>
+          <i class="bi bi-sign-turn-right panel-header-icon"></i>
+          <span>Tìm đường</span>
         </div>
         <div class="routing-panel-body">
-          <label class="routing-label">Điểm đi</label>
-          <input type="text" id="start-input" class="routing-input" placeholder="Nhập điểm đi..." />
-          <div class="routing-actions-row">
-            <button id="pick-start-btn" class="routing-action-btn">
-              <i class="bi bi-crosshair"></i> Chọn từ bản đồ
-            </button>
-            <button id="gps-start-btn" class="routing-action-btn">
-              <i class="bi bi-geo-alt"></i> Dùng vị trí hiện tại
+
+          <!-- START POINT -->
+          <div class="routing-field">
+            <div class="routing-field-label">
+              <span class="routing-dot routing-dot-start"></span>
+              Điểm đi
+            </div>
+            <div id="routing-start-search"></div>
+            <div class="routing-actions-row">
+              <button id="pick-start-btn" class="routing-action-btn" type="button">
+                <i class="bi bi-crosshair2"></i> Chọn trên bản đồ
+              </button>
+              <button id="gps-start-btn" class="routing-action-btn" type="button">
+                <i class="bi bi-geo-alt"></i> Vị trí hiện tại
+              </button>
+            </div>
+          </div>
+
+          <div class="routing-connector">
+            <div class="routing-connector-line"></div>
+            <button id="swap-btn" class="routing-swap-btn" title="Hoán đổi điểm đi/đến" type="button">
+              <i class="bi bi-arrow-down-up"></i>
             </button>
           </div>
 
-          <div class="routing-divider"></div>
-
-          <label class="routing-label">Điểm đến</label>
-          <input type="text" id="dest-input" class="routing-input" placeholder="Nhập điểm đến..." />
-          <div class="routing-actions-row">
-            <button id="pick-dest-btn" class="routing-action-btn">
-              <i class="bi bi-crosshair"></i> Chọn từ bản đồ
-            </button>
+          <!-- END POINT -->
+          <div class="routing-field">
+            <div class="routing-field-label">
+              <span class="routing-dot routing-dot-end"></span>
+              Điểm đến
+            </div>
+            <div id="routing-end-search"></div>
+            <div class="routing-actions-row">
+              <button id="pick-dest-btn" class="routing-action-btn" type="button">
+                <i class="bi bi-crosshair2"></i> Chọn trên bản đồ
+              </button>
+            </div>
           </div>
 
-          <div class="routing-divider"></div>
+          <!-- CALCULATE -->
+          <button id="route-btn" class="routing-btn-primary" type="button">
+            <i class="bi bi-sign-turn-right-fill"></i>
+            Tìm đường đi
+          </button>
 
-          <div class="routing-btn-row">
-            <button id="swap-btn" class="routing-btn routing-btn-outline" title="Hoán đổi">
-              <i class="bi bi-arrow-down-up"></i> Hoán đổi
-            </button>
-            <button id="route-btn" class="routing-btn routing-btn-primary">
-              <i class="bi bi-sign-turn-right-fill"></i> Tìm đường
-            </button>
-          </div>
-
+          <!-- RESULT -->
           <div id="route-result" class="route-result d-none">
             <div class="route-result-item">
-              <span class="route-result-label">Khoảng cách</span>
-              <span id="route-distance" class="route-result-value">—</span>
+              <i class="bi bi-rulers route-result-icon"></i>
+              <div>
+                <div class="route-result-label">Khoảng cách</div>
+                <div id="route-distance" class="route-result-value">—</div>
+              </div>
             </div>
+            <div class="route-result-divider"></div>
             <div class="route-result-item">
-              <span class="route-result-label">Thời gian</span>
-              <span id="route-duration" class="route-result-value">—</span>
+              <i class="bi bi-clock route-result-icon"></i>
+              <div>
+                <div class="route-result-label">Thời gian</div>
+                <div id="route-duration" class="route-result-value">—</div>
+              </div>
             </div>
           </div>
+
           <div id="route-error" class="route-error d-none"></div>
         </div>
       </div>
     `
+  }
+
+  initSearchControls() {
+    this.startSearch = new SearchControl('routing-start-search', {
+      type: 'start',
+      placeholder: 'Nhập điểm đi...',
+      onSelect: async (place) => {
+        const { lat, lon, displayName } = place
+        this.startPoint = { name: displayName, lat, lon }
+        this.mapView.setStartPoint(lat, lon)
+        this.mapView.flyTo(lat, lon, 14)
+        if (this.onStartSelect) {
+          await this.onStartSelect(lat, lon, displayName)
+        }
+        showToast(`📍 Điểm đi: ${displayName}`)
+      }
+    })
+
+    this.endSearch = new SearchControl('routing-end-search', {
+      type: 'destination',
+      placeholder: 'Nhập điểm đến...',
+      onSelect: (place) => {
+        const { lat, lon, displayName } = place
+        this.endPoint = { name: displayName, lat, lon }
+        this.mapView.setEndPoint(lat, lon)
+        this.mapView.flyTo(lat, lon, 14)
+        if (this.onDestSelect) {
+          this.onDestSelect(lat, lon, displayName)
+        }
+        showToast(`🏁 Điểm đến: ${displayName}`)
+      }
+    })
   }
 
   bindEvents() {
@@ -83,19 +144,11 @@ export default class RoutingPanel {
     document.getElementById('gps-start-btn')?.addEventListener('click', () => this.useCurrentLocation())
     document.getElementById('swap-btn')?.addEventListener('click', () => this.swapLocations())
     document.getElementById('route-btn')?.addEventListener('click', () => this.calculateRoute())
-
-    document.getElementById('start-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.geocodeInput('start')
-    })
-    document.getElementById('dest-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.geocodeInput('end')
-    })
   }
 
   setStartPoint(location) {
     this.startPoint = { name: location.name, lat: location.lat, lon: location.lon }
-    const input = document.getElementById('start-input')
-    if (input) input.value = location.name
+    this.startSearch?.setValue(location.name)
     if (location.lat != null && location.lon != null) {
       this.mapView.setStartPoint(location.lat, location.lon)
     }
@@ -103,11 +156,15 @@ export default class RoutingPanel {
 
   setDestination(location) {
     this.endPoint = { name: location.name, lat: location.lat, lon: location.lon }
-    const input = document.getElementById('dest-input')
-    if (input) input.value = location.name
+    this.endSearch?.setValue(location.name)
     if (location.lat != null && location.lon != null) {
       this.mapView.setEndPoint(location.lat, location.lon)
     }
+  }
+
+  // Keep setEndPoint as alias for compatibility
+  setEndPoint(location) {
+    this.setDestination(location)
   }
 
   swapLocations() {
@@ -118,42 +175,15 @@ export default class RoutingPanel {
     this.mapView.clearRoute()
   }
 
-  async geocodeInput(type) {
-    const inputId = type === 'start' ? 'start-input' : 'dest-input'
-    const query = document.getElementById(inputId)?.value?.trim()
-    if (!query) return
-
-    try {
-      const results = await NominatimService.search(query)
-      const loc = {
-        name: results[0].display_name,
-        lat: results[0].lat,
-        lon: results[0].lon
-      }
-      if (type === 'start') this.setStartPoint(loc)
-      else this.setDestination(loc)
-    } catch (error) {
-      showToast(`❌ ${error.message}`)
-    }
-  }
-
   async handleMapPick(type, lat, lon) {
     try {
       const address = await NominatimService.reverseGeocode(lat, lon)
-      const location = {
-        name: address.display_name,
-        lat,
-        lon
-      }
+      const location = { name: address.display_name.split(',')[0], lat, lon }
       if (type === 'start') this.setStartPoint(location)
       else this.setDestination(location)
       showToast(`✅ Đã chọn ${type === 'start' ? 'điểm đi' : 'điểm đến'}`)
     } catch {
-      const location = {
-        name: `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
-        lat,
-        lon
-      }
+      const location = { name: `${lat.toFixed(4)}, ${lon.toFixed(4)}`, lat, lon }
       if (type === 'start') this.setStartPoint(location)
       else this.setDestination(location)
     }
@@ -197,17 +227,15 @@ export default class RoutingPanel {
 
   async calculateRoute() {
     if (this.startPoint.lat == null || this.endPoint.lat == null) {
-      if (!document.getElementById('start-input')?.value) await this.geocodeInput('start')
-      if (!document.getElementById('dest-input')?.value) await this.geocodeInput('end')
-    }
-
-    if (this.startPoint.lat == null || this.endPoint.lat == null) {
       showToast('❌ Vui lòng chọn điểm đi và điểm đến')
       return
     }
 
     const routeBtn = document.getElementById('route-btn')
-    routeBtn.disabled = true
+    if (routeBtn) {
+      routeBtn.disabled = true
+      routeBtn.innerHTML = `<div class="spinner-border spinner-border-sm me-2"></div> Đang tìm...`
+    }
     this.hideRouteError()
     document.getElementById('route-result')?.classList.add('d-none')
 
@@ -229,7 +257,10 @@ export default class RoutingPanel {
       this.showRouteError(error.message)
       showToast(`❌ ${error.message}`)
     } finally {
-      routeBtn.disabled = false
+      if (routeBtn) {
+        routeBtn.disabled = false
+        routeBtn.innerHTML = `<i class="bi bi-sign-turn-right-fill"></i> Tìm đường đi`
+      }
     }
   }
 
@@ -255,7 +286,7 @@ export default class RoutingPanel {
   showRouteError(message) {
     const el = document.getElementById('route-error')
     if (el) {
-      el.textContent = message
+      el.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>${message}`
       el.classList.remove('d-none')
     }
   }
@@ -267,14 +298,11 @@ export default class RoutingPanel {
   clearAll() {
     this.startPoint = { name: '', lat: null, lon: null }
     this.endPoint = { name: '', lat: null, lon: null }
-
-    const startInput = document.getElementById('start-input')
-    const destInput = document.getElementById('dest-input')
-    if (startInput) startInput.value = ''
-    if (destInput) destInput.value = ''
-
+    this.startSearch?.clear()
+    this.endSearch?.clear()
     this.clearRoute()
     this.deactivatePickButtons()
     this.mapView.setPickMode(null)
+    this.mapView.clearRoutePoints()
   }
 }
