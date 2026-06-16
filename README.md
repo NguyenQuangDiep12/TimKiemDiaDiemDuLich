@@ -1,6 +1,6 @@
 # WebGIS Tourism Explorer
 
-Ứng dụng bản đồ du lịch trực tuyến cho phép khám phá địa điểm, tìm đường đi và xem thông tin du lịch theo thời gian thực.
+Ứng dụng bản đồ du lịch trực tuyến cho phép khám phá địa điểm, tìm đường đi và xem thông tin du lịch theo thời gian thực được xây dựng với OpenLayers 10 và JavaScript ES6 Modules.
 
 ---
 
@@ -31,43 +31,59 @@
 -  **Xem tọa độ chuột** theo thời gian thực
 
 ---
-
+ 
 ## Công nghệ sử dụng
-
+ 
 | Thành phần | Công nghệ |
 |---|---|
-| Framework | JavaScript ES6 Modules + Vite |
+| Build tool | Vite + JavaScript ES6 Modules |
 | Bản đồ | OpenLayers 10 |
 | UI | Bootstrap 5 + Bootstrap Icons |
+| Font chữ | Nunito, DM Mono (Google Fonts) |
 | Geocoding | Nominatim API (OpenStreetMap) |
 | Địa điểm du lịch | OpenTripMap API |
 | Tính đường | OSRM (Project OSRM) |
-| Tile bản đồ | OpenStreetMap / OpenTopoMap / ArcGIS |
-
+| Tile bản đồ | OpenStreetMap / ArcGIS World Imagery / OpenTopoMap |
+ 
 ---
 
 ## Kiến trúc dự án
-
+ 
 ```
 src/
 ├── components/
-│   ├── MapView.js          # Quản lý bản đồ OpenLayers
-│   ├── SearchControl.js    # Thanh tìm kiếm địa điểm
-│   ├── PlacesPanel.js      # Danh sách địa điểm du lịch
-│   ├── RoutingPanel.js     # Tìm đường & hiển thị kết quả
-│   └── MapControls.js      # GPS, zoom, chuyển layer
+│   ├── MapView.js          # Khởi tạo & quản lý bản đồ OpenLayers
+│   ├── SearchControl.js    # Ô tìm kiếm với dropdown gợi ý
+│   ├── PlacesPanel.js      # Danh sách & chi tiết địa điểm du lịch
+│   ├── RoutingPanel.js     # Panel tìm đường & hiển thị kết quả
+│   └── MapControls.js      # Nút GPS, zoom, xóa bản đồ, đổi layer
 ├── services/
-│   ├── NominatimService.js      # API tìm kiếm & geocoding
-│   ├── OpenTripMapService.js    # API địa điểm du lịch
-│   └── RoutingService.js        # API tính tuyến đường
+│   ├── NominatimService.js      # Tìm kiếm & reverse geocoding
+│   ├── OpenTripMapService.js    # Lấy danh sách & chi tiết địa điểm
+│   └── RoutingService.js        # Tính tuyến đường (OSRM + waypoints VN)
 ├── utils/
-│   ├── constants.js        # Cấu hình & hằng số
-│   └── helpers.js          # Hàm tiện ích
+│   ├── constants.js        # Cấu hình toàn cục & hằng số
+│   └── helpers.js          # Hàm tiện ích dùng chung
 └── styles/
-    └── style.css           # Giao diện toàn ứng dụng
+    └── style.css           # CSS toàn ứng dụng (CSS variables, responsive)
 ```
 
+
+### Luồng dữ liệu chính
+ 
+```
+Người dùng (click bản đồ / GPS / tìm kiếm)
+    │
+    ▼
+main.js (TourismMapApp)
+    ├── MapView           → Hiển thị marker, route, popup
+    ├── PlacesPanel       → Gọi OpenTripMapService → Render danh sách
+    ├── RoutingPanel      → Gọi RoutingService → Vẽ tuyến đường
+    └── MapControls       → Điều phối GPS, layer, clear
+```
+ 
 ---
+ 
 
 ## Biểu đồ thiết kế
 
@@ -90,21 +106,26 @@ src/
 
 ## Cài đặt & Chạy
 
+### Yêu cầu hệ thống
+ 
+- Node.js >= 20.19.0
+- Trình duyệt hiện đại hỗ trợ ES6 Modules và Geolocation API
+
+
+### Các bước cài đặt
+ 
 ```bash
-# Clone repository
+# 1. Clone repository
 git clone <repo-url>
 cd timkiemdiadiemdulich
-
-# Cài đặt dependencies
+ 
+# 2. Cài đặt dependencies
 npm install
-
-# Chạy môi trường phát triển
+ 
+# 3. Chạy môi trường phát triển
 npm run dev
-
-# Build production
-npm run build
 ```
-
+ 
 > Mở trình duyệt tại `http://localhost:5173`
 
 ---
@@ -116,21 +137,19 @@ Chỉnh sửa file `src/utils/constants.js`:
 ```js
 export const CONFIG = {
   OPENTRIPMAP_API_KEY: 'your_api_key_here',
-  DEFAULT_CENTER: [105.8412, 21.0285], // Hà Nội
+  DEFAULT_CENTER: [105.8412, 21.0285], // Tọa độ mặc định: Hà Nội
   DEFAULT_ZOOM: 14,
-  SEARCH_RADIUS: 5000  // mét
+  SEARCH_RADIUS: 5000    // Bán kính tìm kiếm (mét)
 }
 ```
 
 > Đăng ký API key miễn phí tại: https://opentripmap.io
 
----
-
-## Yêu cầu hệ thống
-
-- Node.js >= 20.19.0
-- Trình duyệt hiện đại hỗ trợ ES6 Modules & Geolocation API
-
+## Ghi chú kỹ thuật
+ 
+- **Tìm đường nội địa:** `RoutingService` tự động chèn các waypoint trung gian (Hà Nội, Đà Nẵng, TP.HCM, v.v.) khi tuyến đường dài hơn 220 km, đảm bảo route không đi qua lãnh thổ nước khác.
+- **Cache tìm kiếm:** `SearchControl` lưu kết quả tra cứu Nominatim trong bộ nhớ phiên làm việc để giảm số lần gọi API.
+- **Responsive:** Giao diện hỗ trợ cả desktop lẫn mobile (breakpoint 768px), sidebar và panel địa điểm tự co lại.
 ---
 
 ## Giấy phép
